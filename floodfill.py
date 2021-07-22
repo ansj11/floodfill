@@ -71,43 +71,50 @@ def stack_floodFill(x, y, edge, index, num, mode='4'):
     return index
 
 #
-def stack_scanLineFill(x, y, edge, index, num, mode='2'):
+def stack_scanLineFill(x, y, edge, index, num, videoWriter, mode='2'):
     if mode == '2':
         offsets = OFFSETS_2
     else:
         raise NotImplementedError
     h, w = edge.shape[:2]
+    def ran_over_neighbors(x, y, edge, index, stack):
+        for offset in offsets:  # 当前点上、下加入栈
+            y1 = min(max(0, y + offset[0]), h - 1)
+            x1 = min(max(0, x + offset[1]), w - 1)
+            if edge[y1, x1] == 0 or index[y1, x1] > 0:
+                continue  # 非边界或者已经遍历过，跳过
+            stack.append([y1, x1])
+        return stack
     stack = [[y,x]]
     while len(stack) > 0:
         y, x = stack.pop()
         if index[y,x] == num:
             continue # 已经遍历过，则跳过
-        xl = x
-        while xl > 0 and index[y, xl] == 0: # 向左扫描
-            index[y, xl] = num
-            TEST.append([y,xl])
-            for offset in offsets:
-                y1 = min(max(0, y + offset[0]), h - 1)
-                x1 = min(max(0, xl + offset[1]), w - 1)
-                if edge[y1, x1] == 0 or index[y1, x1] > 0:
-                    continue  # 非边界或者已经遍历过或者已经加入栈，跳过
-                stack.append([y1, x1])
-            xl -= 1
+        index[y, x] = num # 起点label
+        stack = ran_over_neighbors(x, y, edge, index, stack)
+        xl = x - 1
+        while xl >= 0: # 向左扫描
             if edge[y, xl] == 0 or index[y, xl] > 0:
                 break
-        xr = x
-        while xr < w-1 and index[y, xl] == 0:  # 向左扫描
-            index[y, xr] = num
-            TEST.append([y, xr])
-            for offset in offsets:
-                y1 = min(max(0, y + offset[0]), h - 1)
-                x1 = min(max(0, xr + offset[1]), w - 1)
-                if edge[y1, x1] == 0 or index[y1, x1] > 0:
-                    continue  # 非边界或者已经遍历过或者已经加入栈，跳过
-                stack.append([y1, x1])
-            xr += 1
+            index[y, xl] = num  # 当前点label
+            TEST.append([y,xl])
+            frame = np.tile(edge.reshape(h, w, 1), (1, 1, 3))*255
+            frame[np.where(index> 0)] = np.array([0,255,0])
+            videoWriter.write(frame.astype('uint8'))
+            stack = ran_over_neighbors(xl, y, edge, index, stack)
+            xl -= 1
+
+        xr = x + 1
+        while xr < w:  # 向右扫描
             if edge[y, xr] == 0 or index[y, xr] > 0:
                 break
+            index[y, xr] = num
+            TEST.append([y, xr])
+            frame = np.tile(edge.reshape(h, w, 1), (1, 1, 3)) * 255
+            frame[np.where(index> 0)] = np.array([0,255,0])
+            videoWriter.write(frame.astype('uint8'))
+            stack = ran_over_neighbors(xr, y, edge, index, stack)
+            xr += 1
 
         # plt.imsave('./index/%04d-%04d.jpg'%(y, x), index, vmin=0, vmax=30)
     return index
@@ -129,12 +136,12 @@ def floodfill(edge, index=None, mode='recursive'):
                 elif mode == 'iterative':
                     index = stack_floodFill(x, y, edge, index, num)
                 elif mode == 'scanline':
-                    index = stack_scanLineFill(x, y, edge, index, num)
+                    index = stack_scanLineFill(x, y, edge, index, num, videoWriter)
                 else:
                     raise NotImplementedError
                 num += 1
-                frame = np.tile(index.reshape(h,w,1), (1,1,3))
-                videoWriter.write((frame*9).astype('uint8'))
+                # frame = np.tile(index.reshape(h,w,1), (1,1,3))
+                # videoWriter.write((frame*9).astype('uint8'))
     videoWriter.release()
     print('联通域个数', num)
     return index
@@ -145,7 +152,7 @@ if __name__ == '__main__':
     edge = cv2.resize(edge, (256//1, 256//1), interpolation=cv2.INTER_NEAREST)
     edge[edge <= 127] = 0
     edge[edge > 127] = 1
-    plt.imsave('./edge.jpg', edge)
+    # plt.imsave('./edge.jpg', edge)
     # index = floodfill(edge, mode='recursive')
     # index = floodfill(edge, mode='iterative')
     index = floodfill(edge, mode='scanline')
